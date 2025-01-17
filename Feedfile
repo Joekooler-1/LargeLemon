@@ -1,54 +1,72 @@
 import pandas as pd
 from datetime import datetime
+import os
 
-def merge_feed_files(date, output_file):
+def process_and_merge_feed_files(date, output_folder):
     """
-    Merges data from three files into one, adding a column indicating the source file.
+    Processes individual misnamed `.xls` files (actually CSVs) by adding a 'Source File' column,
+    saves them as new CSVs, and then merges all into a single combined CSV.
 
     Parameters:
     date (str): Date in YYYYMMDD format to locate the specific feed files.
-    output_file (str): Path to save the merged output file.
+    output_folder (str): Path to save the processed and merged files.
 
     Returns:
     None
     """
-    # Define the consistent file paths
-    file1 = f"/path/to/folder1/feed_{date}.xls"
-    file2 = f"/path/to/folder2/feed_{date}.xls"
-    file3 = f"/path/to/folder3/feed_{date}.xls"
+    # Define the consistent file paths and sources
+    file_paths = [
+        (f"/path/to/folder1/feed_{date}.xls", 'TORONTO'),
+        (f"/path/to/folder2/feed_{date}.xls", 'SYDNEY'),
+        (f"/path/to/folder3/feed_{date}.xls", 'LONDON'),
+    ]
 
-    # Read the files into DataFrames with engine='python' for CSV parsing
-    try:
-        df_toronto = pd.read_csv(file1, engine='python')
-        df_sydney = pd.read_csv(file2, engine='python')
-        df_london = pd.read_csv(file3, engine='python')
-    except FileNotFoundError as e:
-        print(f"Error: {e}")
+    processed_files = []
+
+    # Ensure the output folder exists
+    os.makedirs(output_folder, exist_ok=True)
+
+    for file_path, source in file_paths:
+        try:
+            # Read the file, treating the first row as the header
+            df = pd.read_csv(file_path, engine='python', header=0)  # Ensure headers are recognized
+            
+            # Add the 'Source File' column
+            df['Source File'] = source
+            
+            # Save the processed file as a new CSV
+            processed_file = os.path.join(output_folder, f"{source}_processed.csv")
+            df.to_csv(processed_file, index=False)
+            processed_files.append(processed_file)
+
+            print(f"Processed and saved: {processed_file}")
+        except FileNotFoundError:
+            print(f"File not found: {file_path}. Skipping...")
+        except pd.errors.ParserError as e:
+            print(f"Parsing error in file {file_path}: {e}. Skipping...")
+
+    # Check if there are files to merge
+    if not processed_files:
+        print("No files processed. Exiting.")
         return
-    except pd.errors.ParserError as e:
-        print(f"Parsing error in one of the files: {e}")
-        return
 
-    # Add a column indicating the source file
-    df_toronto['Source File'] = 'TORONTO'
-    df_sydney['Source File'] = 'SYDNEY'
-    df_london['Source File'] = 'LONDON'
-
-    # Combine the DataFrames
-    combined_df = pd.concat([df_toronto, df_sydney, df_london], ignore_index=True)
-
-    # Save the combined DataFrame to a new file
-    combined_df.to_csv(output_file, index=False)
+    # Merge all processed files into one, ensuring only the first file contributes its header
+    combined_df = pd.concat(
+        [pd.read_csv(file) for file in processed_files],
+        ignore_index=True
+    )
+    combined_output_file = os.path.join(output_folder, "merged_feed.csv")
+    combined_df.to_csv(combined_output_file, index=False)
 
     # Print the headers of the merged file
     print("Headers in the merged file:")
     print(combined_df.columns.tolist())
 
-    print(f"Data merged successfully into {output_file}!")
+    print(f"Data merged successfully into {combined_output_file}!")
 
 # Example usage
 if __name__ == "__main__":
     # Set the date dynamically or hardcode it
     date = datetime.now().strftime('%Y%m%d')  # Replace with '20250101' or similar if needed
-    output_file = '/path/to/output_folder/merged_feed.csv'
-    merge_feed_files(date, output_file)
+    output_folder = '/path/to/output_folder'
+    process_and_merge_feed_files(date, output_folder)
